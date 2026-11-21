@@ -1,0 +1,82 @@
+{
+  "title": "CFTC Commitments of Traders",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "reports": {
+      "title": "Reports",
+      "description": "Select one or more report variants. Combined reports include futures and options.",
+      "type": "array",
+      "editor": "select",
+      "items": {
+        "type": "string",
+        "enum": ["disaggregated_futures_only", "disaggregated_combined", "legacy_futures_only", "legacy_combined", "tff_futures_only", "tff_combined"],
+        "enumTitles": ["Disaggregated — Futures Only", "Disaggregated — Combined", "Legacy — Futures Only", "Legacy — Combined", "TFF — Futures Only", "TFF — Combined"]
+      },
+      "minItems": 1,
+      "maxItems": 6,
+      "uniqueItems": true,
+      "default": ["disaggregated_futures_only"],
+      "prefill": ["disaggregated_futures_only"]
+    },
+    "contractCodes": {
+      "title": "CFTC contract market codes",
+      "description": "Match up to 10 exact codes. Keep leading zeros. When omitted for Disaggregated Futures Only with no market or group filters, the Actor uses corn, WTI crude oil and gold. An explicit empty list includes all codes.",
+      "type": "array",
+      "editor": "stringList",
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9]{1,12}$" },
+      "maxItems": 10,
+      "prefill": ["002602", "067651", "088691"]
+    },
+    "marketNameContains": {
+      "title": "Market or exchange name contains",
+      "description": "Match a literal substring of the CFTC market and exchange name, ignoring letter case.",
+      "type": "string",
+      "editor": "textfield",
+      "maxLength": 100
+    },
+    "commodityGroups": {
+      "title": "Commodity groups",
+      "description": "Match any listed CFTC group name, ignoring letter case. Examples are AGRICULTURE, NATURAL RESOURCES and FINANCIAL INSTRUMENTS.",
+      "type": "array",
+      "editor": "stringList",
+      "items": { "type": "string", "pattern": "^[A-Za-z][A-Za-z &-]{0,49}$" },
+      "maxItems": 10
+    },
+    "from": {
+      "title": "First report date",
+      "description": "Inclusive first report date in YYYY-MM-DD format. A historical run with no start date covers up to 52 weeks through the end date.",
+      "type": "string",
+      "editor": "textfield",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "to": {
+      "title": "Last report date",
+      "description": "Inclusive last report date in YYYY-MM-DD format. When omitted, the latest available CFTC date anchors the range for each report.",
+      "type": "string",
+      "editor": "textfield",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "latestOnly": {
+      "title": "Latest report week",
+      "description": "Select the most recent report date in bounds for each report before applying market filters. Monitoring also checks previously reported dates in bounds for revisions. Turn off to retrieve history.",
+      "type": "boolean",
+      "default": true,
+      "prefill": true
+    },
+    "onlyNew": {
+      "title": "Monitor new and revised rows",
+      "description": "Emit each tracked report, contract and date on first observation or when published values change. Use the same state key on subsequent runs.",
+      "type": "boolean",
+      "default": false
+    },
+    "stateKey": {
+      "title": "Monitoring state key",
+      "description": "Name of the baseline to use in monitoring mode. Use 1 to 50 letters, digits, underscores or hyphens.",
+      "type": "string",
+      "editor": "textfield",
+      "pattern": "^[a-zA-Z0-9_-]{1,50}$",
+      "default": "default"
+    }
+  }
+}

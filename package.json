@@ -1,0 +1,17 @@
+{
+  "name": "cftc-cot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Retrieve CFTC Commitments of Traders data and detect published revisions.",
+  "engines": { "node": ">=22" },
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node --test"
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "apify": "^3.2.6"
+  }
+}

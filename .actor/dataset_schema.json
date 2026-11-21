@@ -1,0 +1,60 @@
+{
+  "actorSpecification": 1,
+  "fields": {
+    "type": "object",
+    "required": ["reportType", "reportDate", "contractCode", "marketName", "commodityGroup", "openInterest", "openInterestChange", "openInterestPercent", "totalTraders", "positions", "fetchedAt", "source", "changeType"],
+    "properties": {
+      "reportType": { "type": "string", "description": "CFTC report variant." },
+      "reportDate": { "type": "string", "description": "CFTC position date in YYYY-MM-DD format." },
+      "contractCode": { "type": "string", "description": "CFTC contract market code as text, preserving leading zeros." },
+      "marketName": { "type": "string", "description": "CFTC market and exchange name." },
+      "commodityGroup": { "type": ["string", "null"], "description": "CFTC commodity group when available." },
+      "openInterest": { "type": ["number", "null"], "description": "Total open interest across maturities." },
+      "openInterestChange": { "type": ["number", "null"], "description": "CFTC-reported change in total open interest since the previous report." },
+      "openInterestPercent": { "type": ["number", "null"], "description": "CFTC-reported percentage of open interest for the total." },
+      "totalTraders": { "type": ["number", "null"], "description": "CFTC-reported total trader count." },
+      "positions": { "type": "object", "description": "Participant categories with long, short and spreading measures. Each includes position, change, percentOfOpenInterest and traders. Missing or unpublished numbers are null." },
+      "fetchedAt": { "type": "string", "format": "date-time", "description": "UTC time when the Actor fetched the data page." },
+      "source": { "type": "string", "description": "CFTC Public Reporting Environment resource URL." },
+      "changeType": { "type": "string", "enum": ["snapshot", "new", "revision"], "description": "Snapshot mode, first observation, or revision of a tracked row." },
+      "rowHash": { "type": "string", "description": "SHA-256 of the normalized published values in monitoring mode." },
+      "previousRowHash": { "type": "string", "description": "SHA-256 of the last reported version. Included for revisions." },
+      "changedFields": {
+        "type": "array",
+        "description": "Names and previous and current values of the revised fields. Included for revisions.",
+        "items": {
+          "type": "object",
+          "required": ["field", "previous", "current"],
+          "properties": {
+            "field": { "type": "string" },
+            "previous": { "type": ["string", "number", "null"] },
+            "current": { "type": ["string", "number", "null"] }
+          }
+        }
+      }
+    }
+  },
+  "views": {
+    "overview": {
+      "title": "CFTC report rows",
+      "transformation": {
+        "fields": ["reportDate", "reportType", "contractCode", "marketName", "commodityGroup", "openInterest", "openInterestChange", "totalTraders", "changeType", "source"]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "reportDate": { "label": "Report date", "format": "text" },
+          "reportType": { "label": "Report", "format": "text" },
+          "contractCode": { "label": "Contract code", "format": "text" },
+          "marketName": { "label": "Market and exchange", "format": "text" },
+          "commodityGroup": { "label": "Commodity group", "format": "text" },
+          "openInterest": { "label": "Open interest", "format": "number" },
+          "openInterestChange": { "label": "Weekly change", "format": "number" },
+          "totalTraders": { "label": "Total traders", "format": "number" },
+          "changeType": { "label": "Change type", "format": "text" },
+          "source": { "label": "CFTC source", "format": "link" }
+        }
+      }
+    }
+  }
+}
