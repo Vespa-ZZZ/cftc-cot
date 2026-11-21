@@ -84,6 +84,8 @@ With `onlyNew`, first observations have `changeType: "new"`. Changes to previous
 
 With `latestOnly`, each run also rechecks dates it already reported within `from` and `to`. Older dates become eligible for first observations in history mode. Revisions reflect values observed in matching CFTC rows, so intermediate versions between runs and withdrawn rows produce no event. Use the same `stateKey` across runs and distinct keys for independent monitors. In local testing, run a given key sequentially.
 
+When the pay-per-event spending limit is reached, the run stops with a warning. Monitoring retries the remaining rows on the next run. In `latestOnly` mode, the interrupted report date stays eligible even if a newer report is published in the meantime.
+
 The Actor commits the baseline after all pages and dataset writes succeed. If a run fails, the next run compares against the last committed baseline. Consumers should read datasets from successful runs.
 
 ## Source and terms

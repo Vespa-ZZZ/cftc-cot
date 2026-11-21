@@ -67,7 +67,7 @@ function requester({ fetchImpl, sleep, warn, renew }) {
     };
 }
 
-async function dateScopes(get, reportType, options, state) {
+async function dateScopes(get, reportType, options, state, deferredDates) {
     const { from, to, latestOnly } = options;
     let latest;
     if (latestOnly || !to) {
@@ -80,6 +80,9 @@ async function dateScopes(get, reportType, options, state) {
     }
 
     const dates = state ? savedDates(state, reportType, options) : new Set();
+    for (const date of deferredDates) {
+        if ((!from || date >= from) && (!to || date <= to)) dates.add(date);
+    }
     if (latest) dates.add(latest);
     const descending = [...dates].sort().reverse();
     const scopes = [];
@@ -104,16 +107,22 @@ async function* pages(get, reportType, options, scope) {
 }
 
 async function collect(options, { actor, fetchImpl, sleep, warn }, store, renew) {
-    const state = store ? readState(await store.getValue(STATE_RECORD)) : null;
+    const saved = store ? await store.getValue(STATE_RECORD) : null;
+    const state = store ? readState(saved) : null;
+    const pendingDates = { ...saved?.pendingDates };
     const get = requester({ fetchImpl, sleep, warn, renew });
     const seen = new Set();
     let count = 0;
+    let pendingDatesChanged = false;
 
+    reports:
     for (const reportType of options.reports) {
-        const { latest, scopes } = await dateScopes(get, reportType, options, state);
+        const deferredDates = new Set(pendingDates[reportType] ?? []);
+        const { latest, scopes } = await dateScopes(get, reportType, options, state, deferredDates);
         for (const scope of scopes) {
             for await (const page of pages(get, reportType, options, scope)) {
                 const results = [];
+                const snapshots = [];
                 for (const row of page) {
                     if (!matchesFilters(row, options)) continue;
                     const key = rowKey(row);
@@ -124,26 +133,48 @@ async function collect(options, { actor, fetchImpl, sleep, warn }, store, renew)
                         continue;
                     }
                     const previous = state.get(key);
-                    if (!previous && options.latestOnly && row.reportDate !== latest) continue;
+                    if (!previous && options.latestOnly && row.reportDate !== latest && !deferredDates.has(row.reportDate)) continue;
                     const change = observe(row, previous);
                     if (change) {
                         results.push(change.event);
-                        state.set(key, change.snapshot);
+                        snapshots.push([key, change.snapshot]);
                     }
                 }
                 if (results.length) {
                     await renew();
-                    await actor.pushData(results);
-                    count += results.length;
+                    const result = await actor.pushData(results);
+                    const chargeLimitReached = result?.eventChargeLimitReached === true;
+                    const savedCount = chargeLimitReached ? result.chargedCount : results.length;
+                    count += savedCount;
+                    if (state) {
+                        for (const [key, snapshot] of snapshots.slice(0, savedCount)) state.set(key, snapshot);
+                    }
+                    if (chargeLimitReached) {
+                        // Keep the current date eligible even if a newer report appears before the next run.
+                        if (state && latest && !deferredDates.has(latest)) {
+                            pendingDates[reportType] = [...deferredDates, latest];
+                            pendingDatesChanged = true;
+                        }
+                        warn('Pay-per-event charge limit reached. Stopping dataset output.');
+                        break reports;
+                    }
                 }
             }
         }
+        if (options.latestOnly && deferredDates.size) {
+            delete pendingDates[reportType];
+            pendingDatesChanged = true;
+        }
     }
 
-    // Commit a single baseline only after every report page and dataset write succeeds.
-    if (state && count) {
+    // Commit a single baseline after the search completes or stops at the charge limit.
+    if (state && (count || pendingDatesChanged)) {
         await renew();
-        await store.setValue(STATE_RECORD, { version: 1, rows: [...state] });
+        await store.setValue(STATE_RECORD, {
+            version: 1,
+            rows: [...state],
+            ...(Object.keys(pendingDates).length ? { pendingDates } : {}),
+        });
     }
     return count;
 }

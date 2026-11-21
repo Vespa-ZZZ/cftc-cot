@@ -112,6 +112,48 @@ test('monitoring emits a new week and a revision of an older reported date once'
     assert.deepEqual(calls, [['push', 1], ['save', STATE_RECORD], ['push', 2], ['save', STATE_RECORD]]);
 });
 
+test('a charge-limited latest report remains eligible after a newer report arrives', async () => {
+    const { actor, data, stored } = storage();
+    const key = `${storeName('default')}:${STATE_RECORD}`;
+    const olderRows = disaggregated.slice(0, 3).map((row) => ({ ...row, [DATE_COLUMN]: asTimestamp(olderDate) }));
+    const warnings = [];
+    const requests = [];
+    const limited = {
+        ...actor,
+        async pushData(rows) {
+            await actor.pushData(rows.slice(0, 1));
+            return { eventChargeLimitReached: true, chargedCount: 1 };
+        },
+    };
+    const input = { onlyNew: true, reports: [reportType, 'legacy_futures_only'] };
+    assert.equal(await runActor(input, {
+        actor: limited, sleep, warn: (m) => warnings.push(m),
+        fetchImpl: async (url) => {
+            requests.push(url.pathname);
+            return isDateQuery(url) ? dateResult(olderDate) : json(olderRows);
+        },
+    }), 1);
+    assert.deepEqual(requests, ['/resource/72hh-3qpy.json', '/resource/72hh-3qpy.json']);
+    assert.match(warnings[0], /charge limit reached/i);
+    assert.equal(stored.get(key).rows.length, 1);
+
+    const deps = {
+        actor, sleep,
+        fetchImpl: async (url) => {
+            if (!url.pathname.endsWith('/72hh-3qpy.json')) return json([]);
+            if (isDateQuery(url)) return dateResult(latestDate);
+            assert.match(url.searchParams.get('$where'), new RegExp(olderDate));
+            return json([disaggregated[0], ...olderRows]);
+        },
+    };
+    assert.equal(await runActor(input, deps), 3);
+    assert.deepEqual(data.map(({ reportDate, contractCode }) => [reportDate, contractCode]), [
+        [olderDate, '002602'], [latestDate, '002602'], [olderDate, '067651'], [olderDate, '088691'],
+    ]);
+    assert.equal(stored.get(key).pendingDates, undefined);
+    assert.equal(await runActor(input, deps), 0);
+});
+
 test('a later report or dataset failure leaves the baseline at its previous version', async () => {
     const { actor, stored, calls } = storage();
     const options = { reports: [reportType, 'legacy_futures_only'], latestOnly: false, from: latestDate, to: latestDate, onlyNew: true };
