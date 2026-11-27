@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { pushDataWithinLimit } from './charging.js';
 import { historyFrom, latestQuery, matchesFilters, parseInput, recordsQuery, sanitize } from './cot.js';
 import { STATE_RECORD, observe, readState, rowKey, savedDates, storeName, withMonitorLock } from './monitor.js';
 import { normalizePage, readDate } from './reports.js';
@@ -114,6 +115,7 @@ async function collect(options, { actor, fetchImpl, sleep, warn }, store, renew)
     const seen = new Set();
     let count = 0;
     let pendingDatesChanged = false;
+    let spendingLimitReached = false;
 
     reports:
     for (const reportType of options.reports) {
@@ -142,7 +144,7 @@ async function collect(options, { actor, fetchImpl, sleep, warn }, store, renew)
                 }
                 if (results.length) {
                     await renew();
-                    const result = await actor.pushData(results);
+                    const result = await pushDataWithinLimit(actor, results);
                     const chargeLimitReached = result?.eventChargeLimitReached === true;
                     const savedCount = chargeLimitReached ? result.chargedCount : results.length;
                     count += savedCount;
@@ -150,6 +152,7 @@ async function collect(options, { actor, fetchImpl, sleep, warn }, store, renew)
                         for (const [key, snapshot] of snapshots.slice(0, savedCount)) state.set(key, snapshot);
                     }
                     if (chargeLimitReached) {
+                        spendingLimitReached = true;
                         // Keep the current date eligible even if a newer report appears before the next run.
                         if (state && latest && !deferredDates.has(latest)) {
                             pendingDates[reportType] = [...deferredDates, latest];
@@ -176,6 +179,7 @@ async function collect(options, { actor, fetchImpl, sleep, warn }, store, renew)
             ...(Object.keys(pendingDates).length ? { pendingDates } : {}),
         });
     }
+    if (spendingLimitReached) await actor.setValue?.('RUN_SUMMARY', { pushed: count, stopReason: 'spendingLimit' });
     return count;
 }
 

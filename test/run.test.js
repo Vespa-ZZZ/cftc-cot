@@ -208,3 +208,31 @@ test('fails when a cloud monitoring run already holds the state lease', async ()
     };
     await assert.rejects(withMonitorLock(actor, 'cftc-cot-test', async () => assert.fail('Must hold the lease')), /already|Another/);
 });
+
+test('prechecks the dataset item budget and allows non-PPE output', async () => {
+    for (const [isPayPerEvent, budget] of [[true, 1], [true, 0], [false, 0]]) {
+        const configureActor = (actor, records) => {
+            actor.getChargingManager = () => ({
+                getPricingInfo: () => ({ isPayPerEvent }),
+                calculateMaxEventChargeCountWithinLimit(event) {
+                    assert.equal(event, 'apify-default-dataset-item');
+                    return budget - records.length;
+                },
+            });
+        };
+        const { actor, data, stored } = storage();
+        let summary;
+        actor.setValue = async (_, value) => { summary = value; };
+        configureActor(actor, data);
+        const stateKey = 'budget';
+        const count = await runActor({ onlyNew: true, stateKey }, {
+            actor, sleep,
+            fetchImpl: async (url) => isDateQuery(url) ? dateResult(latestDate) : json(disaggregated.slice(0, 3)),
+        });
+        const expected = isPayPerEvent ? budget : 3;
+        assert.equal(count, expected);
+        assert.equal(data.length, expected);
+        assert.equal(summary?.stopReason, isPayPerEvent ? 'spendingLimit' : undefined);
+        assert.equal(stored.get(`${storeName(stateKey)}:${STATE_RECORD}`).rows.length, expected);
+    }
+});
